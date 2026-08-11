@@ -101,6 +101,27 @@ function saveState(obj) {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(obj)) } catch {}
 }
 
+function trackVisit(world) {
+  try {
+    // total + today stats
+    const s = JSON.parse(localStorage.getItem('sb_stats') || '{}')
+    const today = new Date().toDateString()
+    s.totalVisits = (s.totalVisits || 0) + 1
+    s.todayVisits = s.lastDate === today ? (s.todayVisits || 0) + 1 : 1
+    s.lastDate = today
+    localStorage.setItem('sb_stats', JSON.stringify(s))
+    // per world
+    const wv = JSON.parse(localStorage.getItem('sb_world_visits') || '{}')
+    wv[world] = (wv[world] || 0) + 1
+    localStorage.setItem('sb_world_visits', JSON.stringify(wv))
+    // visit log
+    const log = JSON.parse(localStorage.getItem('sb_visit_log') || '[]')
+    log.push({ world, time: Date.now() })
+    if (log.length > 200) log.splice(0, log.length - 200)
+    localStorage.setItem('sb_visit_log', JSON.stringify(log))
+  } catch {}
+}
+
 export default function App() {
   const [time, setTime] = useState('')
   useEffect(() => {
@@ -219,7 +240,7 @@ export default function App() {
   }
 
   const stateWorldRef = useRef(world)
-  useEffect(() => { stateWorldRef.current = world; saveState({ ...loadSaved(), world }) }, [world])
+  useEffect(() => { stateWorldRef.current = world; saveState({ ...loadSaved(), world }); trackVisit(world) }, [world])
 
   useEffect(() => {
     const initWorld = stateWorldRef.current
