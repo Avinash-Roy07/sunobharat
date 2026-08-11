@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { trackVisit, trackTimeSpent, trackSongPlay } from './services/analytics'
 
 function useOnlineCount() {
   const [count, setCount] = useState(1)
@@ -101,26 +102,6 @@ function saveState(obj) {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(obj)) } catch {}
 }
 
-function trackVisit(world) {
-  try {
-    // total + today stats
-    const s = JSON.parse(localStorage.getItem('sb_stats') || '{}')
-    const today = new Date().toDateString()
-    s.totalVisits = (s.totalVisits || 0) + 1
-    s.todayVisits = s.lastDate === today ? (s.todayVisits || 0) + 1 : 1
-    s.lastDate = today
-    localStorage.setItem('sb_stats', JSON.stringify(s))
-    // per world
-    const wv = JSON.parse(localStorage.getItem('sb_world_visits') || '{}')
-    wv[world] = (wv[world] || 0) + 1
-    localStorage.setItem('sb_world_visits', JSON.stringify(wv))
-    // visit log
-    const log = JSON.parse(localStorage.getItem('sb_visit_log') || '[]')
-    log.push({ world, time: Date.now() })
-    if (log.length > 200) log.splice(0, log.length - 200)
-    localStorage.setItem('sb_visit_log', JSON.stringify(log))
-  } catch {}
-}
 
 export default function App() {
   const [time, setTime] = useState('')
@@ -171,16 +152,39 @@ export default function App() {
     try {
       const p = playerRef.current
       const data = p.getVideoData()
+      let songTitle = null, videoId = null
       if (data?.title) {
         const parts = data.title.split(' - ')
-        setTitle(parts[0] || data.title)
+        songTitle = parts[0] || data.title
+        setTitle(songTitle)
         setArtist(parts[1] || '')
       }
-      if (data?.video_id) setThumb(`https://i.ytimg.com/vi/${data.video_id}/mqdefault.jpg`)
+      if (data?.video_id) {
+        videoId = data.video_id
+        setThumb(`https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`)
+      }
       setDuration(Math.floor(p.getDuration()) || 0)
-    } catch {}
+      return { title: songTitle, videoId }
+    } catch { return {} }
   }
   updateMetaRef.current = updateMeta
+
+  // save playlist to cache whenever playing
+  const savePlaylistCache = (player, worldKey) => {
+    try {
+      const list = player.getPlaylist()
+      if (!list || list.length === 0) return
+      const pc = JSON.parse(localStorage.getItem('sb_playlist_cache') || '{}')
+      pc[worldKey] = { ids: list, ts: Date.now() }
+      localStorage.setItem('sb_playlist_cache', JSON.stringify(pc))
+      const vd = player.getVideoData()
+      if (vd?.video_id && vd?.title) {
+        const tc = JSON.parse(localStorage.getItem('sb_title_cache') || '{}')
+        tc[vd.video_id] = vd.title.split(' - ')[0] || vd.title
+        localStorage.setItem('sb_title_cache', JSON.stringify(tc))
+      }
+    } catch {}
+  }
 
   const next = () => { try { playerRef.current?.nextVideo() } catch {} }
   const prev = () => { try { playerRef.current?.previousVideo() } catch {} }
@@ -208,17 +212,20 @@ export default function App() {
       events: {
         onReady(e) {
           setReady(true)
-          // seek to saved position then pause so it shows metadata without forcing play
           if (startSeconds > 0) {
             try { e.target.seekTo(startSeconds, true) } catch {}
           }
-          // load metadata immediately
-          setTimeout(() => { updateMetaRef.current?.() }, 800)
+          setTimeout(() => {
+            updateMetaRef.current?.()
+            savePlaylistCache(e.target, stateWorldRef.current)
+          }, 800)
         },
         onStateChange(e) {
           const S = window.YT.PlayerState
           if (e.data === S.PLAYING) {
-            setPlaying(true); updateMetaRef.current?.()
+            setPlaying(true)
+            const meta = updateMetaRef.current?.()
+            if (meta?.title) trackSongPlay(stateWorldRef.current, meta.title, meta.videoId)
             clearInterval(pollRef.current)
             pollRef.current = setInterval(() => {
               try {
@@ -226,9 +233,16 @@ export default function App() {
                 const d = Math.floor(playerRef.current.getDuration())
                 setElapsed(t)
                 setDuration(d)
-                updateMetaRef.current?.()
+                const meta = updateMetaRef.current?.()
+                // track song play when index changes
+                const idx = playerRef.current.getPlaylistIndex?.() ?? -1
+                if (idx !== lastSongIdxRef.current) {
+                  lastSongIdxRef.current = idx
+                  if (meta?.title) trackSongPlay(stateWorldRef.current, meta.title, meta.videoId)
+                  savePlaylistCache(playerRef.current, stateWorldRef.current)
+                }
                 // persist every tick
-                saveState({ world: stateWorldRef.current, index: playerRef.current.getPlaylistIndex?.() ?? 0, elapsed: t })
+                saveState({ world: stateWorldRef.current, index: idx >= 0 ? idx : 0, elapsed: t })
               } catch {}
             }, 500)
           }
@@ -240,7 +254,14 @@ export default function App() {
   }
 
   const stateWorldRef = useRef(world)
+  const lastSongIdxRef = useRef(-1)
   useEffect(() => { stateWorldRef.current = world; saveState({ ...loadSaved(), world }); trackVisit(world) }, [world])
+
+  // track time spent every 30s
+  useEffect(() => {
+    const iv = setInterval(() => trackTimeSpent(30), 30000)
+    return () => clearInterval(iv)
+  }, [])
 
   useEffect(() => {
     const initWorld = stateWorldRef.current
@@ -275,7 +296,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', userSelect: 'none', fontFamily: 'Inter, sans-serif' }}>
+    <div className="app-root" style={{ position: 'fixed', inset: 0, overflow: 'hidden', userSelect: 'none', fontFamily: 'Inter, sans-serif' }}>
 
       {/* YT player injected dynamically */}
 
