@@ -1,0 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=Tiro+Devanagari+Hindi&family=Inter:wght@300;400;500;600&display=swap');
+@import "tailwindcss";
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; overflow: hidden; }
+
+@keyframes spin-thumb {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes bar1 { from { height: 4px; } to { height: 14px; } }
+@keyframes bar2 { from { height: 8px; } to { height: 6px; } }
+@keyframes bar3 { from { height: 12px; } to { height: 4px; } }
