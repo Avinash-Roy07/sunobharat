@@ -102,12 +102,82 @@ function saveState(obj) {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(obj)) } catch {}
 }
 
+function OnboardingHint({ onDismiss }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 100, pointerEvents: 'none',
+    }}>
+      {/* dark overlay only on the hint area */}
+      <div style={{
+        position: 'absolute', top: 0, right: 0,
+        width: 220, padding: '14px 16px 16px',
+        pointerEvents: 'auto',
+      }}>
+        {/* arrow pointing to hamburger */}
+        <div style={{
+          position: 'absolute', top: 52, right: 44,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+        }}>
+          {/* bouncing hand */}
+          <div style={{
+            fontSize: 26,
+            animation: 'hint-bounce 0.9s ease-in-out infinite',
+          }}>👆</div>
+        </div>
+
+        {/* tooltip card */}
+        <div style={{
+          marginTop: 90, marginRight: 4,
+          background: 'linear-gradient(135deg, rgba(140,20,20,0.97), rgba(60,5,5,0.98))',
+          border: '1px solid rgba(255,100,100,0.35)',
+          borderRadius: 16, padding: '14px 16px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(20px)',
+        }}>
+          <div style={{ fontSize: 18, marginBottom: 6 }}>🎵</div>
+          <div style={{ color: '#fff', fontSize: 13, fontWeight: 700, marginBottom: 4, lineHeight: 1.3 }}>
+            Choose your vibe!
+          </div>
+          <div style={{ color: 'rgba(255,200,200,0.7)', fontSize: 11, lineHeight: 1.5, marginBottom: 12 }}>
+            Tap here to switch worlds — Gym, Truck Driver, Punjabi &amp; more. Pick the music that matches your mood!
+          </div>
+          <button
+            onClick={onDismiss}
+            style={{
+              width: '100%', padding: '9px', borderRadius: 10,
+              background: 'linear-gradient(90deg,#b91c1c,#ea580c)',
+              border: 'none', color: '#fff', fontSize: 12, fontWeight: 700,
+              cursor: 'pointer', letterSpacing: '0.03em',
+            }}
+          >
+            Got it! 🎶
+          </button>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes hint-bounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-8px); }
+        }
+      `}</style>
+    </div>
+  )
+}
+
 
 export default function App() {
   const [time, setTime] = useState('')
   useEffect(() => {
     const tick = () => setTime(new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase())
     tick(); const id = setInterval(tick, 1000); return () => clearInterval(id)
+  }, [])
+
+  // show onboarding hint once per session
+  useEffect(() => {
+    if (sessionStorage.getItem('sb_hint_seen')) return
+    const t = setTimeout(() => setShowHint(true), 1500)
+    return () => clearTimeout(t)
   }, [])
 
   const online    = useOnlineCount()
@@ -120,6 +190,7 @@ export default function App() {
     return WORLDS[path] ? path : (saved.world && WORLDS[saved.world] ? saved.world : 'truck')
   })
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showHint, setShowHint] = useState(false)
   const [visible,  setVisible]  = useState(true)
   const [ready,    setReady]    = useState(false)
   const [playing,  setPlaying]  = useState(false)
@@ -240,6 +311,18 @@ export default function App() {
                   lastSongIdxRef.current = idx
                   if (meta?.title) trackSongPlay(stateWorldRef.current, meta.title, meta.videoId)
                   savePlaylistCache(playerRef.current, stateWorldRef.current)
+                  // update live viewer song immediately
+                  try {
+                    const viewers = JSON.parse(localStorage.getItem('sb_live_viewers') || '{}')
+                    Object.keys(viewers).forEach(k => {
+                      if (viewers[k].world === stateWorldRef.current) {
+                        viewers[k].song = meta?.title || ''
+                        viewers[k].videoId = meta?.videoId || ''
+                        viewers[k].ts = Date.now()
+                      }
+                    })
+                    localStorage.setItem('sb_live_viewers', JSON.stringify(viewers))
+                  } catch {}
                 }
                 // persist every tick
                 saveState({ world: stateWorldRef.current, index: idx >= 0 ? idx : 0, elapsed: t })
@@ -256,6 +339,45 @@ export default function App() {
   const stateWorldRef = useRef(world)
   const lastSongIdxRef = useRef(-1)
   useEffect(() => { stateWorldRef.current = world; saveState({ ...loadSaved(), world }); trackVisit(world) }, [world])
+
+  // broadcast live viewer presence every 4s
+  useEffect(() => {
+    const TAB_KEY = 'gym_live_' + Math.random().toString(36).slice(2)
+    const getDevice = () => {
+      const ua = navigator.userAgent
+      if (/Mobi|Android/i.test(ua)) return 'Mobile'
+      if (/iPad|Tablet/i.test(ua)) return 'Tablet'
+      if (/Macintosh|MacIntel/i.test(ua)) return 'Mac'
+      if (/Windows NT/i.test(ua)) return 'Windows'
+      return 'Desktop'
+    }
+    const ping = () => {
+      try {
+        const viewers = JSON.parse(localStorage.getItem('sb_live_viewers') || '{}')
+        const now = Date.now()
+        // clean stale
+        Object.keys(viewers).forEach(k => { if (now - viewers[k].ts > 10000) delete viewers[k] })
+        viewers[TAB_KEY] = {
+          ts: now,
+          world: stateWorldRef.current,
+          device: getDevice(),
+          song: document.title.split(' — ')[0] || '',
+          videoId: (() => { try { return playerRef.current?.getVideoData()?.video_id || '' } catch { return '' } })(),
+        }
+        localStorage.setItem('sb_live_viewers', JSON.stringify(viewers))
+      } catch {}
+    }
+    ping()
+    const iv = setInterval(ping, 4000)
+    return () => {
+      clearInterval(iv)
+      try {
+        const viewers = JSON.parse(localStorage.getItem('sb_live_viewers') || '{}')
+        delete viewers[TAB_KEY]
+        localStorage.setItem('sb_live_viewers', JSON.stringify(viewers))
+      } catch {}
+    }
+  }, [])
 
   // track time spent every 30s
   useEffect(() => {
@@ -405,32 +527,12 @@ export default function App() {
         </div>
       </div>
 
-      {/* SIDEBAR */}
-      {menuOpen && (
-        <>
-          <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 29, background: 'rgba(0,0,0,0.25)' }} />
-          <div style={{
-            position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(280px,85vw)', zIndex: 30,
-            background: 'linear-gradient(175deg, rgba(100,12,12,0.45) 0%, rgba(8,2,2,0.78) 60%, rgba(4,1,1,0.88) 100%)',
-            backdropFilter: 'blur(32px)', WebkitBackdropFilter: 'blur(32px)',
-            borderLeft: '1px solid rgba(220,60,60,0.2)',
-            display: 'flex', flexDirection: 'column',
-          }}>
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 18px 14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="rgba(255,120,120,0.8)"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
-                <span style={{ color: 'rgba(255,200,200,0.7)', fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 600 }}>Music Worlds</span>
-              </div>
-              <button onClick={() => setMenuOpen(false)} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.6)' }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-              </button>
-            </div>
-
-            {/* Search + filtered world list */}
-            <SidebarWorldList worlds={WORLDS} currentWorld={world} onSelect={selectWorld} />
-          </div>
-        </>
+      {/* ONBOARDING HINT */}
+      {showHint && (
+        <OnboardingHint onDismiss={() => {
+          setShowHint(false)
+          sessionStorage.setItem('sb_hint_seen', '1')
+        }} />
       )}
 
     </div>

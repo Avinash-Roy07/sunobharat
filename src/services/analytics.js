@@ -26,7 +26,14 @@ export function trackVisit(world) {
     log.push({
       world, song: null,
       time: Date.now(),
-      device: /Mobi|Android/i.test(navigator.userAgent) ? 'Mobile' : 'Desktop',
+      device: (() => {
+        const ua = navigator.userAgent
+        if (/Mobi|Android/i.test(ua)) return 'Mobile'
+        if (/iPad|Tablet/i.test(ua)) return 'Tablet'
+        if (/Macintosh|MacIntel/i.test(ua)) return 'Mac'
+        if (/Windows NT/i.test(ua)) return 'Windows'
+        return 'Desktop'
+      })(),
       browser: (() => {
         const ua = navigator.userAgent
         if (ua.includes('Edg')) return 'Edge'

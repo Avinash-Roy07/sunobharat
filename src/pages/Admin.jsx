@@ -433,6 +433,76 @@ function WorldDetail({ worldKey, worldTrend, worldHourly, onBack }) {
   )
 }
 
+const WORLD_NAMES_MAP = WORLD_NAMES
+
+function DeviceIcon({ device }) {
+  if (device === 'Mobile') return <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M17 1.01 7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>
+  if (device === 'Tablet') return <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M21 4H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H3V6h18v12z"/></svg>
+  return <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M20 18c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/></svg>
+}
+
+function LiveViewers() {
+  const [viewers, setViewers] = useState([])
+  useEffect(() => {
+    function load() {
+      try {
+        const raw = JSON.parse(localStorage.getItem('sb_live_viewers') || '{}')
+        const now = Date.now()
+        const active = Object.values(raw).filter(v => now - v.ts < 10000)
+        setViewers(active)
+      } catch { setViewers([]) }
+    }
+    load()
+    const iv = setInterval(load, 2000)
+    return () => clearInterval(iv)
+  }, [])
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#1dd1a1', boxShadow: '0 0 8px #1dd1a1', display: 'inline-block' }} />
+        <span style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>{viewers.length} Live {viewers.length === 1 ? 'Viewer' : 'Viewers'}</span>
+        <span style={{ color: 'rgba(255,150,150,0.4)', fontSize: 10 }}>updates every 2s</span>
+      </div>
+
+      {viewers.length === 0 && (
+        <div style={{ ...CARD_BOX, color: 'rgba(255,150,150,0.3)', fontSize: 13 }}>No one is on the site right now.</div>
+      )}
+
+      {viewers.map((v, i) => (
+        <div key={i} style={{ background: 'rgba(55,6,6,0.55)', border: '1px solid rgba(200,50,50,0.18)', borderRadius: 14, padding: '16px 20px', backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', gap: 16 }}>
+          {/* thumbnail */}
+          <div style={{ width: 64, height: 46, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: 'rgba(180,30,30,0.3)' }}>
+            {v.videoId
+              ? <img src={`https://i.ytimg.com/vi/${v.videoId}/mqdefault.jpg`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+              : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🎵</div>
+            }
+          </div>
+          {/* info */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: '#fff', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {v.song || 'Loading...'}
+            </div>
+            <div style={{ color: 'rgba(255,150,150,0.5)', fontSize: 11, marginTop: 3 }}>
+              {WORLD_NAMES_MAP[v.world] || v.world}
+            </div>
+          </div>
+          {/* device badge */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(180,30,30,0.25)', border: '1px solid rgba(200,50,50,0.2)', borderRadius: 8, padding: '5px 10px', flexShrink: 0, color: 'rgba(255,180,180,0.8)', fontSize: 11, fontWeight: 600 }}>
+            <DeviceIcon device={v.device} />
+            {v.device || 'Desktop'}
+          </div>
+          {/* live dot */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#1dd1a1', boxShadow: '0 0 6px #1dd1a1', display: 'inline-block' }} />
+            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10 }}>live</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function Overview({ data, online, onOpenWorld }) {
   const topWorldName = data.topWorld ? `♪ ${data.topWorld.name}` : '—'
   const topWorldSub = data.topWorld ? `${data.topWorld.value} visits (${data.topWorld.pct.toFixed(0)}%)` : 'No visits yet'
@@ -511,7 +581,7 @@ function Overview({ data, online, onOpenWorld }) {
   )
 }
 
-const NAV = ['Overview', 'Worlds', 'Devices', 'Settings']
+const NAV = ['Overview', 'Live', 'Worlds', 'Devices', 'Settings']
 
 export default function Admin() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem(SESSION_KEY) === '1')
@@ -600,7 +670,13 @@ export default function Admin() {
               fontSize: 13, fontWeight: active === name ? 600 : 400,
               borderLeft: active === name ? '2px solid rgba(255,90,90,0.7)' : '2px solid transparent',
               marginBottom: 2, textAlign: 'left', transition: 'all 0.15s',
-            }}>{name}</button>
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <span>{name}</span>
+              {name === 'Live' && online > 0 && (
+                <span style={{ background: '#1dd1a1', color: '#000', fontSize: 9, fontWeight: 800, borderRadius: 99, padding: '1px 6px' }}>{online}</span>
+              )}
+            </button>
           ))}
         </nav>
         <div style={{ padding: '10px 8px', borderTop: '1px solid rgba(200,50,50,0.12)' }}>
@@ -637,6 +713,7 @@ export default function Admin() {
         <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
           {active === 'WorldDetail' && <WorldDetail worldKey={worldKey} worldTrend={data.worldTrend} worldHourly={data.worldHourly} onBack={() => navigate('/xb7k2-control-9f3m')} />}
           {active === 'Overview' && <Overview data={data} online={online} onOpenWorld={key => navigate('/xb7k2-control-9f3m/world/' + key)} />}
+          {active === 'Live' && <LiveViewers />}
 
           {active === 'Worlds' && (
             <div style={CARD_BOX}>
