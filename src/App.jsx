@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { trackVisit, trackTimeSpent, trackSongPlay } from './services/analytics'
+import MusicExplorePopup from './MusicExplorePopup'
 
 function useOnlineCount() {
   const [count, setCount] = useState(1)
@@ -30,6 +31,8 @@ const WORLDS = {
   bhojpuri:   { name: 'Bhojpuri',     icon: '🎉', line1: 'भोजपुरी', line2: 'धमाका',   playlist: 'PLdWXnMeQmWHA', bg: '/bhojpuri-bg.png'  },
   punjabi:    { name: 'Punjabi',      icon: '🕺', line1: 'पंजाबी',  line2: 'तशान',    playlist: 'PLXASzBhrVsnA', bg: '/punjabi-bg.png'   },
   gym:        { name: 'Gym',          icon: '🏋️', line1: 'जिम का',  line2: 'जोश',     playlist: 'PLM3AObkR-v04', bg: '/gym-bg.png'       },
+  rajumistri: { name: 'Raju Mistri',  icon: '🔧', line1: 'राजू',     line2: 'मिस्त्री', playlist: 'PLVz0vZn2cYqk',  bg: '/rajumistri-bg.jpg' },
+  hindi90s:   { name: "90'S की यादें", icon: '🎬', line1: "90'S",     line2: 'की यादें', playlist: 'PLKGMu6Ivm1S0',  bg: '/hindi90s-bg.png'   },
 }
 
 // pill is same dark red for all worlds
@@ -67,21 +70,24 @@ function SidebarWorldList({ worlds, currentWorld, onSelect }) {
       </div>
       <div style={{ height: 1, background: 'rgba(200,60,60,0.15)', margin: '0 18px 6px' }} />
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {list.map(([key, w]) => (
-          <button key={key} onClick={() => { onSelect(key); setQ('') }} style={{
-            width: '100%', background: currentWorld === key ? 'rgba(160,25,25,0.4)' : 'none',
-            border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '12px 18px', color: currentWorld === key ? '#fff' : 'rgba(255,210,210,0.6)',
-            fontSize: 14, fontWeight: currentWorld === key ? 600 : 400, textAlign: 'left',
-            borderLeft: currentWorld === key ? '3px solid rgba(255,90,90,0.75)' : '3px solid transparent',
-            transition: 'background 0.15s',
-          }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style={{ opacity: currentWorld === key ? 1 : 0.5, flexShrink: 0 }}><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
-            {w.name}
-            {currentWorld === key && <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: 'rgba(255,120,120,0.9)', boxShadow: '0 0 6px rgba(255,80,80,0.8)' }} />}
-          </button>
-        ))}
+        {(() => {
+          const renderBtn = ([key, w]) => (
+            <button key={key} onClick={() => { onSelect(key); setQ('') }} style={{
+              width: '100%', background: currentWorld === key ? 'rgba(160,25,25,0.4)' : 'none',
+              border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '12px 18px', color: currentWorld === key ? '#fff' : 'rgba(255,210,210,0.6)',
+              fontSize: 14, fontWeight: currentWorld === key ? 600 : 400, textAlign: 'left',
+              borderLeft: currentWorld === key ? '3px solid rgba(255,90,90,0.75)' : '3px solid transparent',
+              transition: 'background 0.15s',
+            }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style={{ opacity: currentWorld === key ? 1 : 0.5, flexShrink: 0 }}><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
+              {w.name}
+              {currentWorld === key && <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: 'rgba(255,120,120,0.9)', boxShadow: '0 0 6px rgba(255,80,80,0.8)' }} />}
+            </button>
+          )
+          return <>{list.map(renderBtn)}</>
+        })()}
         {list.length === 0 && <p style={{ color: 'rgba(255,150,150,0.4)', fontSize: 12, textAlign: 'center', marginTop: 12 }}>No worlds found</p>}
       </div>
     </>
@@ -120,6 +126,7 @@ export default function App() {
     return WORLDS[path] ? path : (saved.world && WORLDS[saved.world] ? saved.world : 'truck')
   })
   const [menuOpen, setMenuOpen] = useState(false)
+
   const [visible,  setVisible]  = useState(true)
   const [ready,    setReady]    = useState(false)
   const [playing,  setPlaying]  = useState(false)
@@ -269,6 +276,8 @@ export default function App() {
   const lastSongIdxRef = useRef(-1)
   useEffect(() => { stateWorldRef.current = world; saveState({ ...loadSaved(), world }); trackVisit(world) }, [world])
 
+
+
   // broadcast live viewer presence every 4s
   useEffect(() => {
     const TAB_KEY = 'gym_live_' + Math.random().toString(36).slice(2)
@@ -366,7 +375,7 @@ export default function App() {
           <h1 style={{
             fontFamily: "'Tiro Devanagari Hindi', serif",
             fontSize: 'clamp(2.8rem, 14vw, 8.5rem)',
-            lineHeight: 1.05, color: '#fff', textAlign: 'center',
+            lineHeight: 1.35, color: '#fff', textAlign: 'center',
             textShadow: '4px 4px 0 rgba(0,0,0,0.6), 0 0 60px rgba(0,0,0,0.35)',
             WebkitTextStroke: '2px rgba(255,255,255,0.15)', margin: 0, padding: '0 12px',
           }}>
@@ -455,6 +464,8 @@ export default function App() {
           </button>
         </div>
       </div>
+
+
 
       {/* SIDEBAR */}
       {menuOpen && (
