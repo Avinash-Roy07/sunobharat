@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { trackVisit, trackTimeSpent, trackSongPlay } from './services/analytics'
+import { trackVisit, trackTimeSpent, trackSongPlay, pingLiveViewer, removeLiveViewer } from './services/analytics'
 import MusicExplorePopup from './MusicExplorePopup'
 
 function useOnlineCount() {
@@ -24,15 +24,15 @@ function useOnlineCount() {
 }
 
 const WORLDS = {
-  truck:      { name: 'Truck Driver', icon: '🚛', line1: 'ट्रक वाला', line2: 'सफ़र',    playlist: 'PLK0SeYSdwssE', bg: '/truck-bg.png'     },
-  salon:      { name: 'Salon',        icon: '💈', line1: 'सैलून की', line2: 'धुन',     playlist: 'PLNvMd2ifvgjo', bg: '/barber-bg.jpg'    },
-  chai:       { name: 'Chai Adda',    icon: '☕', line1: 'चाय वाला', line2: 'अड्डा',   playlist: 'PLcvn0G-x_awU', bg: '/chai-bg.png'      },
-  nightdrive: { name: 'Night Drive',  icon: '🌙', line1: 'रात और',  line2: 'रास्ते',  playlist: 'PLV-fnvOKr6xE', bg: '/nightride-bg.png' },
-  bhojpuri:   { name: 'Bhojpuri',     icon: '🎉', line1: 'भोजपुरी', line2: 'धमाका',   playlist: 'PLdWXnMeQmWHA', bg: '/bhojpuri-bg.png'  },
-  punjabi:    { name: 'Punjabi',      icon: '🕺', line1: 'पंजाबी',  line2: 'तशान',    playlist: 'PLXASzBhrVsnA', bg: '/punjabi-bg.png'   },
-  gym:        { name: 'Gym',          icon: '🏋️', line1: 'जिम का',  line2: 'जोश',     playlist: 'PLM3AObkR-v04', bg: '/gym-bg.png'       },
-  rajumistri: { name: 'Raju Mistri',  icon: '🔧', line1: 'राजू',     line2: 'मिस्त्री', playlist: 'PLVz0vZn2cYqk',  bg: '/rajumistri-bg.jpg' },
-  hindi90s:   { name: "90'S की यादें", icon: '🎬', line1: "90'S",     line2: 'की यादें', playlist: 'PLKGMu6Ivm1S0',  bg: '/hindi90s-bg.png'   },
+  truck:      { name: 'Truck Driver',   icon: '🚛', line1: 'ट्रक वाला', line2: 'सफ़र',    playlist: 'PLK0SeYSdwssE', bg: '/truck-bg.png'     },
+  salon:      { name: 'Salon',          icon: '💈', line1: 'सैलून की', line2: 'धुन',     playlist: 'PLNvMd2ifvgjo', bg: '/barber-bg.jpg'    },
+  rajumistri: { name: 'Raju Mistri',    icon: '🔧', line1: 'राजू',     line2: 'मिस्त्री', playlist: 'PLVz0vZn2cYqk',  bg: '/rajumistri-bg.jpg' },
+  hindi90s:   { name: "90'S की यादें",  icon: '🎬', line1: "90'S",     line2: 'की यादें', playlist: 'PLKGMu6Ivm1S0',  bg: '/hindi90s-bg.png'   },
+  chai:       { name: 'Chai Adda',      icon: '☕', line1: 'चाय वाला', line2: 'अड्डा',   playlist: 'PLcvn0G-x_awU', bg: '/chai-bg.png'      },
+  nightdrive: { name: 'Night Drive',    icon: '🌙', line1: 'रात और',  line2: 'रास्ते',  playlist: 'PLV-fnvOKr6xE', bg: '/nightride-bg.png' },
+  bhojpuri:   { name: 'Bhojpuri',       icon: '🎉', line1: 'भोजपुरी', line2: 'धमाका',   playlist: 'PLdWXnMeQmWHA', bg: '/bhojpuri-bg.png'  },
+  punjabi:    { name: 'Punjabi',         icon: '🕺', line1: 'पंजाबी',  line2: 'तशान',    playlist: 'PLXASzBhrVsnA', bg: '/punjabi-bg.png'   },
+  gym:        { name: 'Gym',            icon: '🏋️', line1: 'जिम का',  line2: 'जोश',     playlist: 'PLM3AObkR-v04', bg: '/gym-bg.png'       },
 }
 
 // pill is same dark red for all worlds
@@ -140,10 +140,28 @@ export default function App() {
   const W   = WORLDS[world]
   const pct = duration ? Math.min((elapsed / duration) * 100, 100) : 0
 
-  // sync URL on world change
+  // sync URL on world change + update meta per world
   useEffect(() => {
     window.history.pushState({}, '', `/${world}`)
-    document.title = `${W.name} — Music`
+    const WORLD_META = {
+      truck:      { title: 'Truck Driver Music – Truck Wala Gana | Suno Bharat',   desc: 'Truck driver ke safar ka best music. Truck wala gana, truck geet, truck driver song – free suno.',      kw: 'truck driver music, truck wala gana, truck geet, truck driver song, highway music, safar ka gana, trending truck song, suno bharat, gana suno, trending gana' },
+      salon:      { title: 'Salon Music – Barber Shop Gana | Suno Bharat',         desc: 'Salon aur barber shop ke liye best music. Salon gana, barber music – free suno.',                        kw: 'salon music, barber shop music, salon gana, barber gana, cutting music, suno bharat, gana suno, trending gana' },
+      chai:       { title: 'Chai Adda Music – Chai Wala Gana | Suno Bharat',       desc: 'Chai ki chusski ke saath best desi music. Chai adda gana, tapri music – free suno.',                     kw: 'chai adda music, chai wala gana, tapri music, chai song, desi chai music, suno bharat, gana suno, trending gana' },
+      nightdrive: { title: 'Night Drive Music – Raat Ka Gana | Suno Bharat',       desc: 'Raat ki drive ke liye best music. Night drive songs, lo-fi hindi – free suno.',                          kw: 'night drive music, raat ka gana, lo-fi hindi, midnight songs, chill hindi songs, suno bharat, gana suno, trending gana' },
+      bhojpuri:   { title: 'Bhojpuri Songs – Bhojpuri Gana | Suno Bharat',         desc: 'Best Bhojpuri songs playlist. Bhojpuri gana, bhojpuri dhamaka – free suno.',                            kw: 'bhojpuri songs, bhojpuri gana, bhojpuri hit songs, trending bhojpuri song, suno bharat, gana suno, trending gana' },
+      punjabi:    { title: 'Punjabi Songs – Punjabi Gana | Suno Bharat',           desc: 'Best Punjabi songs playlist. Punjabi gana, new punjabi song – free suno.',                               kw: 'punjabi songs, punjabi gana, new punjabi song, punjabi hits, trending punjabi song, suno bharat, gana suno, trending gana' },
+      gym:        { title: 'Gym Music – Workout Gana | Suno Bharat',               desc: 'Gym workout ke liye best music. Gym gana, workout songs, motivation music – free suno.',                 kw: 'gym music, workout music, gym gana, workout songs hindi, gym motivation songs, suno bharat, gana suno, trending gana' },
+      rajumistri: { title: 'Raju Mistri Music – Kaam Ka Gana | Suno Bharat',       desc: 'Kaam karte waqt sunne ka best music. Raju mistri gana, mazdoor music – free suno.',                    kw: 'raju mistri music, kaam ka gana, mazdoor music, desi kaam music, suno bharat, gana suno, trending gana' },
+      hindi90s:   { title: "90s Hindi Songs – Purane Gaane | Suno Bharat",         desc: "90s ki yaadein taaza karo. Purane gaane, old hindi songs, retro music – free suno.",                   kw: '90s hindi songs, purane gaane, old hindi songs, retro hindi music, 90s ke gaane, suno bharat, gana suno, trending gana' },
+    }
+    const m = WORLD_META[world] || { title: `${W.name} — Suno Bharat`, desc: `${W.name} music free on Suno Bharat.`, kw: 'suno bharat, gana suno, trending gana' }
+    document.title = m.title
+    document.querySelector('meta[name="description"]')?.setAttribute('content', m.desc)
+    document.querySelector('meta[name="keywords"]')?.setAttribute('content', m.kw)
+    document.querySelector('meta[property="og:title"]')?.setAttribute('content', m.title)
+    document.querySelector('meta[property="og:description"]')?.setAttribute('content', m.desc)
+    document.querySelector('meta[property="og:url"]')?.setAttribute('content', `https://www.sunobharat.online/${world}`)
+    document.querySelector('link[rel="canonical"]')?.setAttribute('href', `https://www.sunobharat.online/${world}`)
   }, [world])
 
   // handle browser back/forward
@@ -278,43 +296,16 @@ export default function App() {
 
 
 
-  // broadcast live viewer presence every 4s
+  // broadcast live viewer presence every 5s via Supabase
   useEffect(() => {
-    const TAB_KEY = 'gym_live_' + Math.random().toString(36).slice(2)
-    const getDevice = () => {
-      const ua = navigator.userAgent
-      if (/Mobi|Android/i.test(ua)) return 'Mobile'
-      if (/iPad|Tablet/i.test(ua)) return 'Tablet'
-      if (/Macintosh|MacIntel/i.test(ua)) return 'Mac'
-      if (/Windows NT/i.test(ua)) return 'Windows'
-      return 'Desktop'
-    }
     const ping = () => {
-      try {
-        const viewers = JSON.parse(localStorage.getItem('sb_live_viewers') || '{}')
-        const now = Date.now()
-        // clean stale
-        Object.keys(viewers).forEach(k => { if (now - viewers[k].ts > 10000) delete viewers[k] })
-        viewers[TAB_KEY] = {
-          ts: now,
-          world: stateWorldRef.current,
-          device: getDevice(),
-          song: document.title.split(' — ')[0] || '',
-          videoId: (() => { try { return playerRef.current?.getVideoData()?.video_id || '' } catch { return '' } })(),
-        }
-        localStorage.setItem('sb_live_viewers', JSON.stringify(viewers))
-      } catch {}
+      const song = document.title.split(' — ')[0] || ''
+      const videoId = (() => { try { return playerRef.current?.getVideoData()?.video_id || '' } catch { return '' } })()
+      pingLiveViewer(stateWorldRef.current, song, videoId)
     }
     ping()
-    const iv = setInterval(ping, 4000)
-    return () => {
-      clearInterval(iv)
-      try {
-        const viewers = JSON.parse(localStorage.getItem('sb_live_viewers') || '{}')
-        delete viewers[TAB_KEY]
-        localStorage.setItem('sb_live_viewers', JSON.stringify(viewers))
-      } catch {}
-    }
+    const iv = setInterval(ping, 5000)
+    return () => { clearInterval(iv); removeLiveViewer() }
   }, [])
 
   // track time spent every 30s
@@ -435,6 +426,23 @@ export default function App() {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* SEO keyword strip - visible to Google */}
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 5, padding: '0 0 8px 16px', pointerEvents: 'none' }}>
+          <p style={{ color: 'rgba(255,255,255,0.18)', fontSize: 10, margin: 0, lineHeight: 1.6, letterSpacing: '0.03em' }}>
+            {{
+              truck:      'truck wala gana · truck geet · truck driver song · highway music · safar ka gana · long drive music · suno bharat · gana suno · trending gana',
+              salon:      'salon gana · barber gana · cutting music · barber shop music · salon playlist · suno bharat · gana suno · trending gana',
+              chai:       'chai wala gana · tapri music · chai adda · chai song · chai time music · suno bharat · gana suno · trending gana',
+              nightdrive: 'raat ka gana · lo-fi hindi · midnight songs · night drive music · chill hindi · raat ki drive · suno bharat · gana suno · trending gana',
+              bhojpuri:   'bhojpuri gana · bhojpuri dhamaka · trending bhojpuri song · bhojpuri hit songs · new bhojpuri song · suno bharat · gana suno · trending gana',
+              punjabi:    'punjabi gana · new punjabi song · punjabi tashan · punjabi hits · trending punjabi · suno bharat · gana suno · trending gana',
+              gym:        'gym gana · workout songs hindi · gym motivation songs · exercise music · bodybuilding music · suno bharat · gana suno · trending gana',
+              rajumistri: 'kaam ka gana · mazdoor music · raju mistri gana · desi kaam music · suno bharat · gana suno · trending gana',
+              hindi90s:   'purane gaane · 90s ke gaane · old hindi songs · retro hindi music · 90s bollywood · classic hindi songs · suno bharat · gana suno · trending gana',
+            }[world] || 'suno bharat · gana suno · song suno · trending gana · desi music · hindi gana free'}
+          </p>
         </div>
 
       </div>{/* end fade wrapper */}

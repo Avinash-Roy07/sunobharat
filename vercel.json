@@ -1,0 +1,17 @@
+{
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    { "source": "/truck", "destination": "/truck/index.html" },
+    { "source": "/salon", "destination": "/salon/index.html" },
+    { "source": "/chai", "destination": "/chai/index.html" },
+    { "source": "/nightdrive", "destination": "/nightdrive/index.html" },
+    { "source": "/bhojpuri", "destination": "/bhojpuri/index.html" },
+    { "source": "/punjabi", "destination": "/punjabi/index.html" },
+    { "source": "/gym", "destination": "/gym/index.html" },
+    { "source": "/rajumistri", "destination": "/rajumistri/index.html" },
+    { "source": "/hindi90s", "destination": "/hindi90s/index.html" },
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

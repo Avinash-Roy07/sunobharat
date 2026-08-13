@@ -1,76 +1,89 @@
-const EVENTS_KEY = 'sb_visit_log'
-const STATS_KEY = 'sb_stats'
-const WORLD_VISITS_KEY = 'sb_world_visits'
-const ONLINE_KEY = 'gym_online_tabs'
-const TIME_KEY = 'sb_time_spent'
-const SONG_VISITS_KEY = 'sb_song_visits'
+function getDevice() {
+  const ua = navigator.userAgent
+  if (/Mobi|Android/i.test(ua)) return 'Mobile'
+  if (/iPad|Tablet/i.test(ua)) return 'Tablet'
+  if (/Macintosh|MacIntel/i.test(ua)) return 'Mac'
+  if (/Windows NT/i.test(ua)) return 'Windows'
+  return 'Desktop'
+}
 
-export { EVENTS_KEY, STATS_KEY, WORLD_VISITS_KEY, ONLINE_KEY, TIME_KEY, SONG_VISITS_KEY }
+function getBrowser() {
+  const ua = navigator.userAgent
+  if (ua.includes('Edg')) return 'Edge'
+  if (ua.includes('Chrome')) return 'Chrome'
+  if (ua.includes('Firefox')) return 'Firefox'
+  if (ua.includes('Safari')) return 'Safari'
+  return 'Other'
+}
 
-export const supabase = { channel() { return { on() { return this }, subscribe() {}, track() {}, presenceState() { return {} } } }, removeChannel() {} }
-
-export function trackVisit(world) {
+async function post(data) {
   try {
-    const today = new Date().toDateString()
-    const s = JSON.parse(localStorage.getItem(STATS_KEY) || '{}')
-    s.totalVisits = (s.totalVisits || 0) + 1
-    s.todayVisits = s.lastDate === today ? (s.todayVisits || 0) + 1 : 1
-    s.lastDate = today
-    localStorage.setItem(STATS_KEY, JSON.stringify(s))
-
-    const wv = JSON.parse(localStorage.getItem(WORLD_VISITS_KEY) || '{}')
-    wv[world] = (wv[world] || 0) + 1
-    localStorage.setItem(WORLD_VISITS_KEY, JSON.stringify(wv))
-
-    const log = JSON.parse(localStorage.getItem(EVENTS_KEY) || '[]')
-    log.push({
-      world, song: null,
-      time: Date.now(),
-      device: (() => {
-        const ua = navigator.userAgent
-        if (/Mobi|Android/i.test(ua)) return 'Mobile'
-        if (/iPad|Tablet/i.test(ua)) return 'Tablet'
-        if (/Macintosh|MacIntel/i.test(ua)) return 'Mac'
-        if (/Windows NT/i.test(ua)) return 'Windows'
-        return 'Desktop'
-      })(),
-      browser: (() => {
-        const ua = navigator.userAgent
-        if (ua.includes('Edg')) return 'Edge'
-        if (ua.includes('Chrome')) return 'Chrome'
-        if (ua.includes('Firefox')) return 'Firefox'
-        if (ua.includes('Safari')) return 'Safari'
-        return 'Other'
-      })(),
+    await fetch('/api/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
     })
-    if (log.length > 1000) log.splice(0, log.length - 1000)
-    localStorage.setItem(EVENTS_KEY, JSON.stringify(log))
   } catch {}
 }
 
-// Track time spent — called every 30s from App.jsx
-export function trackTimeSpent(seconds) {
+export async function trackVisit(world) {
   try {
-    const t = JSON.parse(localStorage.getItem(TIME_KEY) || '{}')
+    const log = JSON.parse(localStorage.getItem('sb_visit_log') || '[]')
+    log.push({ world, device: getDevice(), browser: getBrowser(), time: Date.now() })
+    if (log.length > 1000) log.splice(0, log.length - 1000)
+    localStorage.setItem('sb_visit_log', JSON.stringify(log))
+    const wv = JSON.parse(localStorage.getItem('sb_world_visits') || '{}')
+    wv[world] = (wv[world] || 0) + 1
+    localStorage.setItem('sb_world_visits', JSON.stringify(wv))
+  } catch {}
+  post({ type: 'visit', world, device: getDevice(), browser: getBrowser() })
+}
+
+export async function trackTimeSpent(seconds) {
+  try {
+    const t = JSON.parse(localStorage.getItem('sb_time_spent') || '{}')
     const today = new Date().toDateString()
     t.total = (t.total || 0) + seconds
     t.today = t.lastDate === today ? (t.today || 0) + seconds : seconds
     t.lastDate = today
-    localStorage.setItem(TIME_KEY, JSON.stringify(t))
+    localStorage.setItem('sb_time_spent', JSON.stringify(t))
   } catch {}
+  post({ type: 'time_spent', seconds })
 }
 
-// Track song play — called from App.jsx when song changes
-export function trackSongPlay(world, songTitle, videoId) {
+export async function trackSongPlay(world, title, videoId) {
   try {
     const today = new Date().toDateString()
-    const sv = JSON.parse(localStorage.getItem(SONG_VISITS_KEY) || '{}')
-    const key = world + '||' + songTitle
-    if (!sv[key]) sv[key] = { world, title: songTitle, videoId: videoId || '', total: 0, todayDate: '', today: 0 }
+    const sv = JSON.parse(localStorage.getItem('sb_song_visits') || '{}')
+    const key = world + '||' + title
+    if (!sv[key]) sv[key] = { world, title, videoId: videoId || '', total: 0, todayDate: '', today: 0 }
     if (videoId) sv[key].videoId = videoId
     sv[key].total = (sv[key].total || 0) + 1
     if (sv[key].todayDate !== today) { sv[key].todayDate = today; sv[key].today = 0 }
     sv[key].today = (sv[key].today || 0) + 1
-    localStorage.setItem(SONG_VISITS_KEY, JSON.stringify(sv))
+    localStorage.setItem('sb_song_visits', JSON.stringify(sv))
   } catch {}
+  post({ type: 'song_play', world, title, video_id: videoId || '' })
+}
+
+const TAB_KEY = 'sb_tab_' + Math.random().toString(36).slice(2)
+
+export async function pingLiveViewer(world, song, videoId) {
+  try {
+    const viewers = JSON.parse(localStorage.getItem('sb_live_viewers') || '{}')
+    const now = Date.now()
+    Object.keys(viewers).forEach(k => { if (now - viewers[k].ts > 12000) delete viewers[k] })
+    viewers[TAB_KEY] = { ts: now, world, device: getDevice(), song: song || '', videoId: videoId || '' }
+    localStorage.setItem('sb_live_viewers', JSON.stringify(viewers))
+  } catch {}
+  post({ type: 'ping_live', tab_key: TAB_KEY, world, device: getDevice(), song: song || '', video_id: videoId || '' })
+}
+
+export async function removeLiveViewer() {
+  try {
+    const viewers = JSON.parse(localStorage.getItem('sb_live_viewers') || '{}')
+    delete viewers[TAB_KEY]
+    localStorage.setItem('sb_live_viewers', JSON.stringify(viewers))
+  } catch {}
+  post({ type: 'remove_live', tab_key: TAB_KEY })
 }
